@@ -44,12 +44,27 @@ mtgCollection({
   csvPath: 'src/data/collection.csv', // relative to the project root
   imageCacheDir: 'src/assets/mtg-collection/card-images', // must stay under src/ for astro:assets to optimize it
   scryfallCachePath: '.cache/mtg-collection/scryfall-cache.json',
+  scryfallBulkCachePath: '.cache/mtg-collection/scryfall-bulk-default-cards.jsonl.gz',
   cacheTtlHours: 12, // how long cached Scryfall data (prices, images) stays valid
 });
 ```
 
-All are optional. `imageCacheDir` and `scryfallCachePath` are derived
-caches, regenerable from the CSV — gitignore them in your site.
+All are optional. `imageCacheDir`, `scryfallCachePath`, and
+`scryfallBulkCachePath` are derived caches, regenerable from the CSV —
+gitignore them in your site.
+
+### How Scryfall lookups work
+
+Card data is resolved from Scryfall's [bulk-data](https://scryfall.com/docs/api/bulk-data)
+snapshot (the `default_cards` file — every printing, gzip-compressed JSON
+Lines) rather than one `/cards/collection` request per 75 cards. That file
+is downloaded once and re-downloaded only when Scryfall's copy changes,
+so a whole collection resolves in at most two requests total instead of one
+per batch — the difference between hitting Scryfall's rate limit and not.
+Any ID the bulk snapshot doesn't have yet (e.g. a printing added since the
+last refresh) falls back to the live `/cards/collection` endpoint for just
+that ID. Both the per-card cache and the bulk snapshot respect
+`cacheTtlHours`.
 
 ## Using the data
 
