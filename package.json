@@ -1,0 +1,38 @@
+{
+  "name": "astro-mtg-collection",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Astro integration for browsing a Magic: The Gathering collection from a ManaBox export, enriched with live Scryfall data.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./images": {
+      "types": "./dist/images.d.ts",
+      "default": "./dist/images.js"
+    },
+    "./client": "./dist/client.d.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && cp src/client.d.ts dist/client.d.ts",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "astro": "^7.0.0"
+  },
+  "dependencies": {
+    "papaparse": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/papaparse": "^5.3.15",
+    "astro": "^7.1.6",
+    "typescript": "^5.6.3"
+  }
+}
