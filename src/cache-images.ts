@@ -12,6 +12,7 @@ import { getConfig } from './config.js';
 // is a persistent cache across builds, not a full re-download every time.
 
 const CONCURRENCY = 6;
+const USER_AGENT = 'astro-mtg-collection (build script)';
 
 async function pooledForEach<T>(items: T[], concurrency: number, task: (item: T) => Promise<void>): Promise<void> {
   let index = 0;
@@ -25,7 +26,7 @@ async function pooledForEach<T>(items: T[], concurrency: number, task: (item: T)
 }
 
 async function downloadImage(url: string, destination: string): Promise<void> {
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
