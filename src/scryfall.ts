@@ -6,10 +6,11 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ScryfallCard } from './types.js';
 import { getConfig } from './config.js';
+import { candidateKeysForCard, type CollectionIdentifier, type RowIdentity } from './card-identity.js';
 
-// Build-time only: reads the ManaBox export and enriches it with Scryfall
-// data while the site is built. Never imported from client-side code, so
-// Node builtins (fs) are safe to use here.
+// Build-time only: reads the collection export and enriches it with
+// Scryfall data while the site is built. Never imported from client-side
+// code, so Node builtins (fs) are safe to use here.
 
 const BULK_DATA_INDEX_ENDPOINT = 'https://api.scryfall.com/bulk-data';
 const BULK_DATA_TYPE = 'default_cards'; // every printing, English, with prices — see https://scryfall.com/docs/api/bulk-data
@@ -23,6 +24,7 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
+/** Keyed by matchKey (see card-identity.ts), not raw Scryfall ID — a row without one still gets a stable cache key from its set+number or name. */
 type Cache = Record<string, CacheEntry>;
 
 function loadJson<T>(filePath: string): T | null {
@@ -40,6 +42,13 @@ function saveJson(filePath: string, data: unknown): void {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Human-readable description of an identifier, for the notFound list. */
+function describeLookup(lookup: CollectionIdentifier): string {
+  if ('id' in lookup) return lookup.id;
+  if ('collector_number' in lookup) return `${lookup.set.toUpperCase()} #${lookup.collector_number}`;
+  return lookup.set ? `${lookup.name} (${lookup.set.toUpperCase()})` : lookup.name;
 }
 
 interface BulkDataEntry {
@@ -113,15 +122,22 @@ async function ensureBulkData(bulkDataPath: string, cacheTtlMs: number): Promise
 /**
  * Streams the gzip-compressed JSON Lines bulk-data file (every Scryfall
  * printing — several hundred thousand entries, one JSON object per line)
- * and picks out only the cards in `wantedIds`, so we never hold the full
- * dataset in memory at once.
+ * and picks out only the cards matching `wanted`'s identifiers, so we
+ * never hold the full dataset in memory at once.
+ *
+ * Every wanted row is checked by Scryfall ID first (a single cheap string
+ * check) since that's the common case (ManaBox/Moxfield/Helvault usually
+ * have one). Only rows still unresolved fall through to the fuller
+ * set+number/name matching in candidateKeysForCard — this keeps the
+ * per-line cost close to the old ID-only lookup for typical collections,
+ * paying the extra work only when a row actually lacks a Scryfall ID.
  */
-async function readCardsFromBulkData(
-  bulkDataPath: string,
-  wantedIds: Set<string>
-): Promise<Map<string, ScryfallCard>> {
+async function readCardsFromBulkData(bulkDataPath: string, wanted: RowIdentity[]): Promise<Map<string, ScryfallCard>> {
   const found = new Map<string, ScryfallCard>();
-  if (wantedIds.size === 0) return found;
+  if (wanted.length === 0) return found;
+
+  const remaining = new Set(wanted.map((w) => w.matchKey));
+  const needsFallbackMatch = wanted.some((w) => !('id' in w.lookup));
 
   const source = fs.createReadStream(bulkDataPath);
   const lines = readline.createInterface({ input: source.pipe(zlib.createGunzip()), crlfDelay: Infinity });
@@ -130,10 +146,22 @@ async function readCardsFromBulkData(
     for await (const line of lines) {
       if (!line) continue;
       const card = JSON.parse(line) as ScryfallCard;
-      if (wantedIds.has(card.id)) {
-        found.set(card.id, card);
-        if (found.size === wantedIds.size) break;
+
+      const idKey = `id:${card.id.toLowerCase()}`;
+      if (remaining.has(idKey)) {
+        found.set(idKey, card);
+        remaining.delete(idKey);
+      } else if (needsFallbackMatch) {
+        for (const key of candidateKeysForCard(card)) {
+          if (remaining.has(key)) {
+            found.set(key, card);
+            remaining.delete(key);
+            break;
+          }
+        }
       }
+
+      if (remaining.size === 0) break;
     }
   } finally {
     lines.close();
@@ -145,50 +173,54 @@ async function readCardsFromBulkData(
 
 export interface FetchCollectionResult {
   cards: Map<string, ScryfallCard>;
+  /** Human-readable identifiers (Scryfall ID / set+number / name) for rows Scryfall didn't recognize. */
   notFound: string[];
 }
 
 /**
- * Looks up Scryfall card data for a set of card IDs at build time. Cards are
- * resolved from the local bulk-data snapshot first (downloaded/refreshed as
- * needed) and only missing IDs — e.g. printings added after the last bulk
- * refresh — fall back to the live /cards/collection endpoint, batched 75 at
- * a time. Results are cached on disk (per the resolved config's
- * cacheTtlHours) so repeated local builds don't re-touch the network or
- * re-parse the bulk file at all.
+ * Looks up Scryfall card data for a set of collection rows at build time.
+ * Each row is identified by whatever it has (Scryfall ID, set + collector
+ * number, or name — see card-identity.ts), and cards are resolved from the
+ * local bulk-data snapshot first (downloaded/refreshed as needed), falling
+ * back to the live /cards/collection endpoint — which accepts the same
+ * mixed identifier shapes — only for rows the snapshot doesn't resolve,
+ * batched 75 at a time. Results are cached on disk by matchKey (per the
+ * resolved config's cacheTtlHours) so repeated local builds don't re-touch
+ * the network or re-parse the bulk file at all.
  */
-export async function fetchCollection(scryfallIds: string[]): Promise<FetchCollectionResult> {
+export async function fetchCollection(identities: RowIdentity[]): Promise<FetchCollectionResult> {
   const { scryfallCachePath, scryfallBulkCachePath, cacheTtlHours } = getConfig();
   const cacheTtlMs = cacheTtlHours * 60 * 60 * 1000;
 
-  const uniqueIds = Array.from(new Set(scryfallIds));
+  const uniqueByKey = new Map(identities.map((i) => [i.matchKey, i]));
   const cache = loadJson<Cache>(scryfallCachePath) ?? {};
   const now = Date.now();
 
   const cards = new Map<string, ScryfallCard>();
-  const idsToFetch: string[] = [];
+  const toFetch: RowIdentity[] = [];
 
-  for (const id of uniqueIds) {
-    const cached = cache[id];
+  for (const identity of uniqueByKey.values()) {
+    const cached = cache[identity.matchKey];
     if (cached && now - cached.fetchedAt < cacheTtlMs) {
-      cards.set(id, cached.card);
+      cards.set(identity.matchKey, cached.card);
     } else {
-      idsToFetch.push(id);
+      toFetch.push(identity);
     }
   }
 
   const notFound: string[] = [];
 
-  if (idsToFetch.length > 0) {
+  if (toFetch.length > 0) {
     await ensureBulkData(scryfallBulkCachePath, cacheTtlMs);
-    const fromBulk = await readCardsFromBulkData(scryfallBulkCachePath, new Set(idsToFetch));
+    const fromBulk = await readCardsFromBulkData(scryfallBulkCachePath, toFetch);
 
-    for (const [id, card] of fromBulk) {
-      cards.set(id, card);
-      cache[id] = { card, fetchedAt: now };
+    for (const [matchKey, card] of fromBulk) {
+      cards.set(matchKey, card);
+      cache[matchKey] = { card, fetchedAt: now };
     }
 
-    const stillMissing = idsToFetch.filter((id) => !fromBulk.has(id));
+    const stillMissing = toFetch.filter((i) => !fromBulk.has(i.matchKey));
+    const missingByKey = new Map(stillMissing.map((i) => [i.matchKey, i]));
 
     for (let i = 0; i < stillMissing.length; i += CHUNK_SIZE) {
       const chunk = stillMissing.slice(i, i + CHUNK_SIZE);
@@ -200,21 +232,30 @@ export async function fetchCollection(scryfallIds: string[]): Promise<FetchColle
           Accept: 'application/json',
           'User-Agent': USER_AGENT,
         },
-        body: JSON.stringify({ identifiers: chunk.map((id) => ({ id })) }),
+        body: JSON.stringify({ identifiers: chunk.map((c) => c.lookup) }),
       });
 
       if (!response.ok) {
         throw new Error(`Scryfall API error (${response.status}): ${response.statusText}`);
       }
 
-      const json = (await response.json()) as { data: ScryfallCard[]; not_found?: Array<{ id: string }> };
+      const json = (await response.json()) as { data: ScryfallCard[] };
 
+      // The response doesn't say which identifier matched which card, so
+      // reverse-match each returned card against the identifiers still
+      // outstanding in this chunk — the same candidate-key logic used
+      // against the bulk-data file.
+      const remainingKeys = new Set(chunk.map((c) => c.matchKey));
       for (const card of json.data) {
-        cards.set(card.id, card);
-        cache[card.id] = { card, fetchedAt: now };
+        const matchedKey = candidateKeysForCard(card).find((k) => remainingKeys.has(k));
+        if (!matchedKey) continue;
+        cards.set(matchedKey, card);
+        cache[matchedKey] = { card, fetchedAt: now };
+        remainingKeys.delete(matchedKey);
       }
-      for (const nf of json.not_found ?? []) {
-        notFound.push(nf.id);
+      for (const key of remainingKeys) {
+        const identity = missingByKey.get(key);
+        notFound.push(identity ? describeLookup(identity.lookup) : key);
       }
 
       if (i + CHUNK_SIZE < stillMissing.length) {
@@ -236,7 +277,7 @@ export function getCardImage(card: ScryfallCard | null): string | null {
   return face?.image_uris?.normal ?? null;
 }
 
-/** Picks the unit price for the printing/finish recorded in the ManaBox row. */
+/** Picks the unit price for the printing/finish recorded in the collection row. */
 export function getUnitPrice(card: ScryfallCard | null, foil: string): number | null {
   if (!card) return null;
   const raw =

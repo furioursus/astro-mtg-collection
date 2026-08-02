@@ -1,8 +1,17 @@
 import path from 'node:path';
+import type { CollectionFormat } from './types.js';
 
 export interface MtgCollectionOptions {
-  /** Path to the ManaBox CSV export, relative to the Astro project root. Default: 'src/data/collection.csv'. */
+  /** Path to the collection export CSV, relative to the Astro project root. Default: 'src/data/collection.csv'. */
   csvPath?: string;
+  /**
+   * Which export format `csvPath` is in. Default: `'auto'`, which sniffs
+   * the CSV's header row and picks the matching format automatically —
+   * set this explicitly only if auto-detection picks the wrong one (e.g.
+   * a heavily customized export) or you want parsing to fail fast on a
+   * format mismatch instead of silently trying to detect it.
+   */
+  format?: 'auto' | CollectionFormat;
   /** Directory to cache downloaded card images in, relative to the project root. Default: 'src/assets/mtg-collection/card-images'. */
   imageCacheDir?: string;
   /** Path to the Scryfall API response cache file, relative to the project root. Default: '.cache/mtg-collection/scryfall-cache.json'. */
@@ -16,6 +25,7 @@ export interface MtgCollectionOptions {
 export interface ResolvedConfig {
   root: string;
   csvPath: string;
+  format: 'auto' | CollectionFormat;
   imageCacheDir: string;
   scryfallCachePath: string;
   scryfallBulkCachePath: string;
@@ -24,6 +34,7 @@ export interface ResolvedConfig {
 
 const DEFAULTS: Required<MtgCollectionOptions> = {
   csvPath: 'src/data/collection.csv',
+  format: 'auto',
   imageCacheDir: 'src/assets/mtg-collection/card-images',
   scryfallCachePath: '.cache/mtg-collection/scryfall-cache.json',
   scryfallBulkCachePath: '.cache/mtg-collection/scryfall-bulk-default-cards.jsonl.gz',
@@ -34,6 +45,7 @@ function resolve(root: string, options: MtgCollectionOptions): ResolvedConfig {
   return {
     root,
     csvPath: path.resolve(root, options.csvPath ?? DEFAULTS.csvPath),
+    format: options.format ?? DEFAULTS.format,
     imageCacheDir: path.resolve(root, options.imageCacheDir ?? DEFAULTS.imageCacheDir),
     scryfallCachePath: path.resolve(root, options.scryfallCachePath ?? DEFAULTS.scryfallCachePath),
     scryfallBulkCachePath: path.resolve(root, options.scryfallBulkCachePath ?? DEFAULTS.scryfallBulkCachePath),

@@ -1,8 +1,10 @@
 # astro-mtg-collection
 
 An Astro integration for browsing a Magic: The Gathering collection from a
-[ManaBox](https://manabox.app/) CSV export, enriched with live pricing,
-images, and card details from the [Scryfall API](https://scryfall.com/docs/api).
+[ManaBox](https://manabox.app/), [Archidekt](https://archidekt.com/),
+[Moxfield](https://www.moxfield.com/), [Deckbox](https://deckbox.org/), or
+Helvault CSV export, enriched with live pricing, images, and card details
+from the [Scryfall API](https://scryfall.com/docs/api).
 
 It handles the data side — reading your export, fetching Scryfall data,
 querying/sorting/filtering, and caching card images locally so they're
@@ -30,18 +32,18 @@ export default defineConfig({
 });
 ```
 
-Save your ManaBox export to `src/data/collection.csv` (Collection → menu →
-Export → CSV in the ManaBox app). The integration reads it and fetches
-Scryfall data automatically before every `astro build` and at the start of
-`astro dev` — no separate script to run. Missing file? The site still
-builds; `loadCollection()` just reports `missingFile: true` so you can
-render a setup message instead of failing.
+Export your collection and save it to `src/data/collection.csv`. The
+integration reads it and fetches Scryfall data automatically before every
+`astro build` and at the start of `astro dev` — no separate script to run.
+Missing file? The site still builds; `loadCollection()` just reports
+`missingFile: true` so you can render a setup message instead of failing.
 
 ### Options
 
 ```js
 mtgCollection({
   csvPath: 'src/data/collection.csv', // relative to the project root
+  format: 'auto', // 'auto' | 'manabox' | 'archidekt' | 'moxfield' | 'deckbox' | 'helvault'
   imageCacheDir: 'src/assets/mtg-collection/card-images', // must stay under src/ for astro:assets to optimize it
   scryfallCachePath: '.cache/mtg-collection/scryfall-cache.json',
   scryfallBulkCachePath: '.cache/mtg-collection/scryfall-bulk-default-cards.jsonl.gz',
@@ -53,6 +55,27 @@ All are optional. `imageCacheDir`, `scryfallCachePath`, and
 `scryfallBulkCachePath` are derived caches, regenerable from the CSV —
 gitignore them in your site.
 
+### Supported export formats
+
+| Format | Where to export | Notes |
+| --- | --- | --- |
+| ManaBox | Collection → menu → Export → CSV | Always has a Scryfall ID per row. |
+| Archidekt | Collection → Export | One row can carry both a nonfoil and a foil count — split into two rows internally. No rarity/condition in the export. |
+| Moxfield | Collection → Export → CSV | Some export variants have no set code, only a set name — set/collector-number matching is skipped for those rows. |
+| Deckbox | Inventory → Export | Almost never includes a Scryfall ID or set code, so rows usually match Scryfall by name alone — the least precise of these formats. |
+| Helvault | Settings → Export CSV | The free tier's export is minimal (name, Scryfall ID, quantity, foil) — rarity, set, and collector number are backfilled from Scryfall. |
+
+Leave `format` at its default `'auto'` and the integration will sniff the
+CSV's header row and pick the right parser. Set it explicitly if a heavily
+customized export confuses auto-detection, or if you'd rather parsing fail
+fast on a mismatch than silently guess.
+
+Whichever format you use, rows that don't carry a Scryfall ID are still
+resolved — by set + collector number if both are present, or by card name
+otherwise — so formats with thinner exports (Deckbox, Helvault's free tier)
+still work, just with less precise matching when a card has multiple
+printings/reprints and no set to disambiguate.
+
 ### How Scryfall lookups work
 
 Card data is resolved from Scryfall's [bulk-data](https://scryfall.com/docs/api/bulk-data)
@@ -61,9 +84,9 @@ Lines) rather than one `/cards/collection` request per 75 cards. That file
 is downloaded once and re-downloaded only when Scryfall's copy changes,
 so a whole collection resolves in at most two requests total instead of one
 per batch — the difference between hitting Scryfall's rate limit and not.
-Any ID the bulk snapshot doesn't have yet (e.g. a printing added since the
+Any row the bulk snapshot doesn't resolve (e.g. a printing added since the
 last refresh) falls back to the live `/cards/collection` endpoint for just
-that ID. Both the per-card cache and the bulk snapshot respect
+that row. Both the per-card cache and the bulk snapshot respect
 `cacheTtlHours`.
 
 ## Using the data
@@ -104,7 +127,7 @@ fetched once.
 
 Other exports: `summarize(cards)` (unique/total counts + estimated value),
 `uniqueSorted(values)` (for building filter dropdowns), `RARITY_ORDER`, and
-the `ManaBoxRow`/`ScryfallCard`/`EnrichedCard` types.
+the `CollectionRow`/`ScryfallCard`/`EnrichedCard` types.
 
 ## Using cached images with `<Image>`/`<Picture>`
 

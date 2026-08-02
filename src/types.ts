@@ -1,21 +1,40 @@
-/** A single row from a ManaBox CSV export, normalized to camelCase. */
-export interface ManaBoxRow {
+/** The collection export formats this package knows how to parse. */
+export type CollectionFormat = 'manabox' | 'archidekt' | 'moxfield' | 'deckbox' | 'helvault';
+
+/**
+ * A single row from a collection export, normalized to camelCase across
+ * all supported formats (see `CollectionFormat`). Not every format
+ * supplies every field — e.g. Deckbox and Helvault's free tier omit
+ * rarity, and Deckbox usually has no Scryfall ID at all — so fields the
+ * source export doesn't provide are left as their empty default and
+ * backfilled from the matched Scryfall card where possible (see
+ * `buildEnrichedCards` in collection.ts).
+ */
+export interface CollectionRow {
+  source: CollectionFormat;
   folder: string;
   name: string;
   setCode: string;
   setName: string;
   collectorNumber: string;
-  /** "normal" | "foil" | "etched" (ManaBox's own values, kept as-is) */
+  /** "normal" | "foil" | "etched" (kept lowercase, ManaBox's own vocabulary) */
   foil: string;
   rarity: string;
   quantity: number;
-  manaboxId: string;
   scryfallId: string;
   purchasePrice: number | null;
   misc: string;
   condition: string;
   language: string;
   purchasePriceCurrency: string;
+  /**
+   * Stable key used to match this row to Scryfall card data — derived from
+   * whichever identifying fields the row has (Scryfall ID, set + collector
+   * number, or name) by `identifyRow()` in card-identity.ts. Rows are
+   * useless for lookups until this is set, so parsers never populate it
+   * directly; collection-data.ts fills it in right after parsing.
+   */
+  matchKey: string;
 }
 
 /** The subset of the Scryfall card object this app actually uses. */
@@ -55,9 +74,9 @@ export interface ScryfallCard {
   scryfall_uri: string;
 }
 
-/** A ManaBox row merged with its live Scryfall card data. */
+/** A collection row merged with its live Scryfall card data. */
 export interface EnrichedCard {
-  row: ManaBoxRow;
+  row: CollectionRow;
   card: ScryfallCard | null;
   imageUrl: string | null;
   /** Unit price in USD for this row's foil/nonfoil printing, if known. */

@@ -1,15 +1,34 @@
-import type { ManaBoxRow, ScryfallCard, EnrichedCard, SortKey } from './types.js';
+import type { CollectionRow, ScryfallCard, EnrichedCard, SortKey } from './types.js';
 import { getCardImage, getUnitPrice } from './scryfall.js';
 
+/**
+ * Fills in display fields a row's own export didn't supply (e.g. Deckbox
+ * has no rarity or set code; Helvault's free tier omits rarity, set code/
+ * name, and collector number) from its matched Scryfall card, so every
+ * format looks the same downstream regardless of how little its source
+ * export actually contained.
+ */
+function backfillFromCard(row: CollectionRow, card: ScryfallCard | null): CollectionRow {
+  if (!card) return row;
+  return {
+    ...row,
+    name: row.name || card.name,
+    setCode: row.setCode || card.set,
+    setName: row.setName || card.set_name,
+    collectorNumber: row.collectorNumber || card.collector_number,
+    rarity: row.rarity || card.rarity,
+  };
+}
+
 export function buildEnrichedCards(
-  rows: ManaBoxRow[],
+  rows: CollectionRow[],
   scryfallCards: Map<string, ScryfallCard>
 ): EnrichedCard[] {
   return rows.map((row) => {
-    const card = scryfallCards.get(row.scryfallId) ?? null;
+    const card = scryfallCards.get(row.matchKey) ?? null;
     const unitPrice = getUnitPrice(card, row.foil);
     return {
-      row,
+      row: backfillFromCard(row, card),
       card,
       imageUrl: getCardImage(card),
       unitPrice,
