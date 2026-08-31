@@ -127,7 +127,7 @@ fetched once.
   `setCode`, `setName`, `rarity`, `foil`, `condition`, `language` (each a
   single value or an array of allowed values), `color` (a WUBRG letter, or
   `'C'` for colorless — matches color identity), `minPrice`/`maxPrice`,
-  `minQuantity`/`maxQuantity`.
+  `minQuantity`/`maxQuantity`, `fullArt`/`extendedArt` (booleans — see below).
 - `sortBy` — `'name' | 'price' | 'quantity' | 'rarity' | 'set' | 'setName' | 'condition' | 'foil'`.
 - `order` — `'asc' | 'desc'` (default `'asc'`).
 - `limit` — cap the result count.
@@ -135,6 +135,27 @@ fetched once.
 Other exports: `summarize(cards)` (unique/total counts + estimated value),
 `uniqueSorted(values)` (for building filter dropdowns), `RARITY_ORDER`, and
 the `CollectionRow`/`ScryfallCard`/`EnrichedCard` types.
+
+### Flagging full art / extended art
+
+Every `EnrichedCard` carries `isFullArt` and `isExtendedArt` booleans,
+derived from the matched Scryfall printing (`full_art`/`border_color` and
+`frame_effects` respectively — a card with no Scryfall match is `false` for
+both):
+
+```astro
+---
+const extendedArtCards = queryCollection(cards, { where: { extendedArt: true } });
+const fullArtLands = queryCollection(cards, { where: { fullArt: true, name: 'Island' } });
+---
+
+{extendedArtCards.map((c) => <span>{c.row.name} {c.isExtendedArt && '✨'}</span>)}
+```
+
+`fullArt`/`extendedArt` also work as `queryCollection` filters (set to
+`false` to exclude rather than require them), or check `card.isFullArt` /
+`card.isExtendedArt` directly when rendering your own markup instead of
+filtering.
 
 ## Using cached images with `<Image>`/`<Picture>`
 

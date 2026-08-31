@@ -22,6 +22,10 @@ export interface CollectionWhere {
   maxPrice?: number;
   minQuantity?: number;
   maxQuantity?: number;
+  /** Full-bleed "full art" printings only (or, set to `false`, exclude them). */
+  fullArt?: boolean;
+  /** Extended-art frame printings only (or, set to `false`, exclude them). */
+  extendedArt?: boolean;
 }
 
 export type SortField = 'name' | 'price' | 'quantity' | 'rarity' | 'set' | 'setName' | 'condition' | 'foil';
@@ -41,7 +45,7 @@ function matchesOneOrMany(value: string, filter: string | string[] | undefined):
 }
 
 function matchesWhere(entry: EnrichedCard, where: CollectionWhere): boolean {
-  const { row, card, unitPrice } = entry;
+  const { row, card, unitPrice, isFullArt, isExtendedArt } = entry;
 
   if (where.name && !row.name.toLowerCase().includes(where.name.toLowerCase())) return false;
   if (!matchesOneOrMany(row.setCode, where.setCode)) return false;
@@ -60,6 +64,8 @@ function matchesWhere(entry: EnrichedCard, where: CollectionWhere): boolean {
   if (where.maxPrice !== undefined && (unitPrice ?? Infinity) > where.maxPrice) return false;
   if (where.minQuantity !== undefined && row.quantity < where.minQuantity) return false;
   if (where.maxQuantity !== undefined && row.quantity > where.maxQuantity) return false;
+  if (where.fullArt !== undefined && isFullArt !== where.fullArt) return false;
+  if (where.extendedArt !== undefined && isExtendedArt !== where.extendedArt) return false;
 
   return true;
 }
