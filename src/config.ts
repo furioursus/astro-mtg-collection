@@ -20,6 +20,15 @@ export interface MtgCollectionOptions {
   scryfallBulkCachePath?: string;
   /** How long cached Scryfall data (prices, images) stays valid, in hours. Default: 12. */
   cacheTtlHours?: number;
+  /**
+   * Download card images to `imageCacheDir` at all. Default: `true`. Set `false` to skip it
+   * entirely (and the getLocalCardImage()/astro:assets path along with it) if you're rendering
+   * against `imageUrl` (Scryfall's own hosted URL) directly instead — worthwhile on ephemeral
+   * hosting, where a local image cache buys nothing across builds anyway (nothing persists
+   * between them), so downloading thousands of images just to discard them each build is pure
+   * waste. `getLocalCardImage()` always returns `undefined` when this is `false`.
+   */
+  cacheImages?: boolean;
 }
 
 export interface ResolvedConfig {
@@ -30,6 +39,7 @@ export interface ResolvedConfig {
   scryfallCachePath: string;
   scryfallBulkCachePath: string;
   cacheTtlHours: number;
+  cacheImages: boolean;
 }
 
 const DEFAULTS: Required<MtgCollectionOptions> = {
@@ -39,6 +49,7 @@ const DEFAULTS: Required<MtgCollectionOptions> = {
   scryfallCachePath: '.cache/mtg-collection/scryfall-cache.json',
   scryfallBulkCachePath: '.cache/mtg-collection/scryfall-bulk-default-cards.jsonl.gz',
   cacheTtlHours: 12,
+  cacheImages: true,
 };
 
 function resolve(root: string, options: MtgCollectionOptions): ResolvedConfig {
@@ -50,6 +61,7 @@ function resolve(root: string, options: MtgCollectionOptions): ResolvedConfig {
     scryfallCachePath: path.resolve(root, options.scryfallCachePath ?? DEFAULTS.scryfallCachePath),
     scryfallBulkCachePath: path.resolve(root, options.scryfallBulkCachePath ?? DEFAULTS.scryfallBulkCachePath),
     cacheTtlHours: options.cacheTtlHours ?? DEFAULTS.cacheTtlHours,
+    cacheImages: options.cacheImages ?? DEFAULTS.cacheImages,
   };
 }
 

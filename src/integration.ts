@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { AstroIntegration } from 'astro';
-import { configure, type MtgCollectionOptions } from './config.js';
+import { configure, getConfig, type MtgCollectionOptions } from './config.js';
 import { mtgCollectionImagesPlugin } from './virtual-images.js';
 import { cacheCardImages } from './cache-images.js';
 
@@ -30,9 +30,11 @@ export default function mtgCollection(options: MtgCollectionOptions = {}): Astro
         });
       },
       'astro:build:start': async ({ logger }) => {
+        if (!getConfig().cacheImages) return;
         await cacheCardImages((message) => logger.info(message));
       },
       'astro:server:setup': async ({ logger }) => {
+        if (!getConfig().cacheImages) return;
         await cacheCardImages((message) => logger.info(message));
       },
     },

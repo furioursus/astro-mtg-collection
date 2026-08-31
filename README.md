@@ -48,8 +48,15 @@ mtgCollection({
   scryfallCachePath: '.cache/mtg-collection/scryfall-cache.json',
   scryfallBulkCachePath: '.cache/mtg-collection/scryfall-bulk-default-cards.jsonl.gz',
   cacheTtlHours: 12, // how long cached Scryfall data (prices, images) stays valid
+  cacheImages: true, // set false to skip downloading images entirely — see below
 });
 ```
+
+Set `cacheImages: false` if you're rendering against `imageUrl` (Scryfall's own hosted URL)
+directly instead of `getLocalCardImage()`/astro:assets — worthwhile on ephemeral hosting, where a
+local image cache buys nothing across builds (nothing persists between them), so downloading
+thousands of images just to discard them each build is pure waste. `getLocalCardImage()` always
+returns `undefined` when this is off.
 
 All are optional. `imageCacheDir`, `scryfallCachePath`, and
 `scryfallBulkCachePath` are derived caches, regenerable from the CSV —
