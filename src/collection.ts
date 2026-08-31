@@ -1,5 +1,5 @@
 import type { CollectionRow, ScryfallCard, EnrichedCard, SortKey } from './types.js';
-import { getCardImage, getUnitPrice } from './scryfall.js';
+import { getCardImage, getUnitPrice, isFullArt, isExtendedArt } from './scryfall.js';
 
 /**
  * Fills in display fields a row's own export didn't supply (e.g. Deckbox
@@ -33,6 +33,8 @@ export function buildEnrichedCards(
       imageUrl: getCardImage(card),
       unitPrice,
       lineValue: unitPrice !== null ? unitPrice * row.quantity : null,
+      isFullArt: isFullArt(card),
+      isExtendedArt: isExtendedArt(card),
     };
   });
 }

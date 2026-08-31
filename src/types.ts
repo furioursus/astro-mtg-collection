@@ -51,6 +51,12 @@ export interface ScryfallCard {
   mana_cost?: string;
   cmc?: number;
   layout?: string;
+  /** True for full-bleed "full art" printings (basic lands, some showcase/borderless treatments). */
+  full_art?: boolean;
+  /** Frame treatments applied to this printing — includes `'extendedart'` for extended-art borders. */
+  frame_effects?: string[];
+  /** `'black' | 'white' | 'borderless' | 'silver' | 'gold'` — borderless art also reads as full-bleed. */
+  border_color?: string;
   prices: {
     usd: string | null;
     usd_foil: string | null;
@@ -83,6 +89,10 @@ export interface EnrichedCard {
   unitPrice: number | null;
   /** unitPrice * quantity, if unitPrice is known. */
   lineValue: number | null;
+  /** True when this printing is full art (Scryfall's `full_art` flag, or a borderless treatment). */
+  isFullArt: boolean;
+  /** True when this printing has an extended-art frame (Scryfall `frame_effects` includes `'extendedart'`). */
+  isExtendedArt: boolean;
 }
 
 export type SortKey =

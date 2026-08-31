@@ -277,6 +277,22 @@ export function getCardImage(card: ScryfallCard | null): string | null {
   return face?.image_uris?.normal ?? null;
 }
 
+/**
+ * True for full-bleed "full art" printings — Scryfall's own `full_art` flag,
+ * plus borderless treatments (showcase borderless, extended-art borderless
+ * alt-arts, etc.), which are full-bleed art but not always flagged `full_art`.
+ */
+export function isFullArt(card: ScryfallCard | null): boolean {
+  if (!card) return false;
+  return card.full_art === true || card.border_color === 'borderless';
+}
+
+/** True when this printing has an extended-art frame (e.g. Ravnica Allegiance guild-kit alt-arts). */
+export function isExtendedArt(card: ScryfallCard | null): boolean {
+  if (!card) return false;
+  return card.frame_effects?.includes('extendedart') ?? false;
+}
+
 /** Picks the unit price for the printing/finish recorded in the collection row. */
 export function getUnitPrice(card: ScryfallCard | null, foil: string): number | null {
   if (!card) return null;
