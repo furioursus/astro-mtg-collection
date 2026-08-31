@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./collection": {
+      "types": "./dist/collection-exports.d.ts",
+      "default": "./dist/collection-exports.js"
+    },
     "./images": {
       "types": "./dist/images.d.ts",
       "default": "./dist/images.js"

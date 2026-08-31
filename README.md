@@ -91,9 +91,16 @@ that row. Both the per-card cache and the bulk snapshot respect
 
 ## Using the data
 
+Import from the `astro-mtg-collection/collection` subpath, not the main package — the main entry
+also re-exports the integration itself, and its import chain reaches the Vite plugin the
+integration registers. Importing `loadCollection`/etc. from the main entry pulls that chain into
+your own component's build along with it, which has caused a broken production build downstream
+(the plugin's `import ... from 'vite'` ending up bundled into a page's own SSR chunk instead of
+staying external to it). The `/collection` subpath never touches the integration or its plugin.
+
 ```astro
 ---
-import { loadCollection, queryCollection } from 'astro-mtg-collection';
+import { loadCollection, queryCollection } from 'astro-mtg-collection/collection';
 
 const { cards, missingFile, error } = await loadCollection();
 
